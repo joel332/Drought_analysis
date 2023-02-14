@@ -1,0 +1,110 @@
+###set working directory
+setwd()
+
+
+### ------------ Load data and package -----------------------------------------
+### Load data and package
+require(vegan)
+library(ggplot2)
+
+#Load gene abundances
+myckel_sp_gene <-read.csv()
+head()
+
+#Load metadata
+myckel_env <- read.csv()
+head()
+str()
+
+
+### ------------ Distance matrix -------------------------------------------------------------------------------------------------------
+
+### Compute distance matrix using Bray-Curtis on double-root transformed abundances
+
+#use this to ensure transformed data lies between 0 - 10. This makes sure highly abundant species dont over influence the results
+range(myckel_sp_gene)
+range(myckel_sp_gene ^ 0.5)
+range(myckel_sp_gene ^ 0.25)
+range(myckel_sp_gene ^ 0.22)
+range(myckel_sp_gene ^ 0.20)
+
+#I have chosen to use 0.25 convertion
+
+# We use a double root transformation to reduce the range of the data
+
+dist_myckel_gene <- vegdist(myckel_sp_gene ^ 0.25, method = "bray")
+dist_myckel_gene
+# otherwise highly abundant genes would dominate the distance measures
+
+### ------------ NMDS ----------------------------------------------------------
+### Run NMDS
+nmds <- metaMDS(dist_myckel_gene, distance = "bray", k=2, trymax = 999)
+
+#Run stressplot
+stressplot(nmds)
+
+#Export "metaMDS" values to ggplot
+scrs <- scores(nmds, display = 'sites')
+scrs <- cbind(as.data.frame(scrs), Management = myckel_env$Year)
+cent <- aggregate(cbind(NMDS1, NMDS2) ~ Management, data = scrs, FUN = mean)
+segs <- merge(scrs, setNames(cent, c('Management','oNMDS1','oNMDS2')),
+              by = 'Management', sort = FALSE)
+
+# Plot NMDS using ggplot
+p <- ggplot(scrs, aes(x = NMDS1, y = NMDS2, colour = as.factor(Management))) +
+  geom_segment(data = segs, mapping = aes(xend = oNMDS1, yend = oNMDS2)) + # spiders
+  geom_point(data = cent, size = 5) +                         # centroids
+  geom_point() +                                              # sample scores
+  coord_fixed() +
+  scale_color_manual(values = c("steelblue4", "orangered4")) +
+  theme_bw()
+p  
+
+
+ggsave("nmds_year_genes.tiff", units="in", width=10, height=8, dpi=500, compression = 'lzw')
+
+
+### ------------ PERMANOVA -----------------------------------------------------
+
+#PERMANOVA Year
+pmv_year_gene <- adonis(
+  myckel_sp_gene ^ 0.25 ~ Year, data = myckel_env,
+  permutations = 999,
+  method = "bray")
+pmv_year_gene
+
+
+#PERMANOVA Ecotype
+pmv_ecotype_gene <- adonis(
+  myckel_sp_gene ^ 0.25 ~ Ecotype, data = myckel_env,
+  permutations = 999,
+  method = "bray")
+pmv_ecotype_gene
+
+# Compute the pairwise test to see where differences occur between ecotype
+library(RVAideMemoire)
+Wilks_pairwise_year <- pairwise.perm.manova(dist(myckel_sp_gene,"euclidean"),myckel_env$Year,nperm=999, test = "Wilks")
+Wilks_pairwise_year
+
+
+#Save the details
+results <- capture.output(print(pmv_year_gene), print(pmv_ecotype_gene), print(Wilks_pairwise_ecotype))
+writeLines(results, con = file("output_PERMANOVA_genes.txt"))
+
+
+
+### ------------ SIMPER --------------------------------------------------------
+sim <- simper(myckel_sp_gene, group = myckel_env$Year, permutations = 999)
+a <- summary(sim)
+a
+# contr :   contribution to dissimilarity between upstream and downstream
+# sd    :   standard deviation of contribution (is the species response consitent?)
+# ratio :   ratio between contr and sd (high ratio = high, consisten contribution)
+# av.   :   average abundance per groups
+# cumsum:   cumulative contribution (rule of thumb : species till 70% are investigated)
+
+
+#Save the details
+results <- capture.output(print(a))
+writeLines(results, con = file("output_gene_year_final.csv"))
+
