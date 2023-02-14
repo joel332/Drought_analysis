@@ -1,0 +1,59 @@
+#set working directory
+setwd()
+
+library(ggplot2)
+library(dplyr)
+#import Data (set in two columns, Flux, Mesocosm)
+
+Skog_flux <- read.delim2(, header = TRUE)
+Skog_flux$TREAT <- as.factor()
+Skog_flux$Year <- as.factor()
+Skog_flux
+
+# Show the group levels
+levels(Skog_flux$TREAT)
+levels(Skog_flux$Year)
+
+#summary
+summary_statistics_ecotype <- group_by(Skog_flux, Ecotype) %>%
+  summarise(
+    count = n(),
+    mean = mean(CH4, na.rm = TRUE),
+    sd = sd(CH4, na.rm = TRUE),
+    median = median(CH4, na.rm = TRUE),
+    IQR = IQR(CH4, na.rm = TRUE),
+    min = min(CH4, na.rm = TRUE),
+    max = max(CH4, na.rm = TRUE)
+  )
+summary_statistics_ecotype
+
+summary_statistics_year <- group_by(Skog_flux, Year) %>%
+  summarise(
+    count = n(),
+    mean = mean(CH4, na.rm = TRUE),
+    sd = sd(CH4, na.rm = TRUE),
+    median = median(CH4, na.rm = TRUE),
+    IQR = IQR(CH4, na.rm = TRUE),
+    min = min(CH4, na.rm = TRUE),
+    max = max(CH4, na.rm = TRUE)
+  )
+summary_statistics_year
+
+results <- capture.output(print(summary_statistics_ecotype), print(summary_statistics_year))
+writeLines(results, con = file("Flux_summary_statistics.txt"))
+
+#Boxplot fluxes
+bp <- ggplot(Skog_flux, aes(x=Year, y=CH4, color=Year)) + 
+  geom_boxplot(aes(color=Year), outlier.shape = 8) +
+  geom_jitter(shape=16, position=position_jitter(0.2))+
+  ylab(expression(paste("C", H[4], " (nmol ", m^-2, s^-1,,")")))+
+  xlab("Ecotype") +
+  scale_color_manual(values = c("steelblue4", "orangered4")) +
+  theme_bw()+
+  theme(text = element_text(size=17))
+bp
+
+bp + facet_grid(. ~ TREAT)
+
+
+ggsave("box_plot_CH4_flux.tiff", units="in", width=10, height=8, dpi=500, compression = 'lzw')
